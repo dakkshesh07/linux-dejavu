@@ -1,67 +1,126 @@
 # Maintainer: Jan Alexander Steffens (heftig) <heftig@archlinux.org>
+# Maintainer: Dakkshesh <dakkshesh5@gmail.com>
 
-pkgbase=linux
-pkgver=5.17.arch1
+pkgbase=linux-dejavu
+pkgver=5.17.dejavu
 pkgrel=1
 pkgdesc='Linux'
 _srctag=v${pkgver%.*}-${pkgver##*.}
-url="https://github.com/archlinux/linux/commits/$_srctag"
 arch=(x86_64)
 license=(GPL2)
 makedepends=(
 	bc kmod libelf pahole cpio perl tar xz
-	xmlto python-sphinx python-sphinx_rtd_theme graphviz imagemagick
-	git
+	clang llvm lld git
 )
+optdepends=('ccache: Adds support for caching compilation output to speedup recompiling time')
 options=('!strip')
-_srcname=archlinux-linux
-source=(
-	"$_srcname::git+https://github.com/archlinux/linux?signed#tag=$_srctag"
-	config # the main kernel config file
-)
-validpgpkeys=(
-	'ABAF11C65A2970B130ABE3C479BE3E4300411886' # Linus Torvalds
-	'647F28654894E3BD457199BE38DBBDC86092693E' # Greg Kroah-Hartman
-	'A2FF3A36AAA56654109064AB19802F8B0D70FC30' # Jan Alexander Steffens (heftig)
-	'C7E7849466FE2358343588377258734B41C31549' # David Runge <dvzrv@archlinux.org>
-)
-sha256sums=('SKIP'
-	'05381b085c83737922a85fa6f42aa61b3d1400840a7952bf8524726e1d8f74f8')
 
 export KBUILD_BUILD_HOST=archlinux
-export KBUILD_BUILD_USER=$pkgbase
 export KBUILD_BUILD_TIMESTAMP="$(date -Ru${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EPOCH})"
+KERNELDIR="$(pwd)/../"
+
+[ -z ${ci+x} ] && ci=n
+[ -z ${lto+x} ] && lto=n
+[ -z ${ccache+x} ] && ccache=n
 
 prepare() {
-	cd $_srcname
+	cd $KERNELDIR
 
-	echo "Setting version..."
-	scripts/setlocalversion --save-scmversion
-	echo "-$pkgrel" >localversion.10-pkgrel
-	echo "${pkgbase#linux}" >localversion.20-pkgname
+	CLANG_DIR="$KERNELDIR/clang"
 
-	local src
-	for src in "${source[@]}"; do
-		src="${src%%::*}"
-		src="${src##*/}"
-		[[ $src == *.patch ]] || continue
-		echo "Applying patch $src..."
-		patch -Np1 <"../$src"
-	done
+	if [ "$ccache" = "y" ]; then
+		which ccache || echo "ccache not installed but ccache=y passed\ninstall ccache or dont pass ccache=y and try again"
+	fi
+
+	if [ -d "$CLANG_DIR"/ ]; then
+		echo "Existing clang found, pulling new changes..."
+		cd clang/
+		git pull
+		cd $KERNELDIR
+	else
+		echo "Cloning Clang..."
+		git clone https://gitlab.com/dakkshesh07/neutron-clang.git clang
+	fi
 
 	echo "Setting config..."
-	cp ../config .config
-	make olddefconfig
-	diff -u ../config .config || :
+	export PATH=$CLANG_DIR/bin:$PATH
+	echo "CC: $(readlink -f $(which clang))"
+	make clean && make mrproper
+	make LLVM=1 \
+		LLVM_IAS=1 \
+		CC=clang \
+		AR=llvm-ar \
+		NM=llvm-nm \
+		LD=ld.lld \
+		STRIP=llvm-strip \
+		OBJCOPY=llvm-objcopy \
+		OBJDUMP=llvm-objdump \
+		OBJSIZE=llvm-size \
+		HOSTCC=clang \
+		HOSTCXX=clang++ \
+		HOSTAR=llvm-ar \
+		HOSTLD=ld.lld \
+		dejavu_defconfig
+
+	make oldconfig && make prepare
+
+	if [ "$ci" = "n" ]; then
+		vendor=$(lscpu | awk '/Vendor ID/{print $3}')
+		if [[ $vendor == "GenuineIntel" || $vendor == "AuthenticAMD" ]]; then
+			echo "CPU: $(lscpu | awk '/Model name/{ print substr($0, index($0,$3)) }')"
+			echo "Applying optimizations..."
+			scripts/config --disable CONFIG_GENERIC_CPU
+			scripts/config --set-val CONFIG_NR_CPUS $(nproc --all)
+			scripts/config --set-val CONFIG_VGA_ARB_MAX_GPUS $(lspci | grep -E "VGA|3D" | wc -l)
+		fi
+	else
+		echo "Using CI configs..."
+		scripts/config --set-val CONFIG_VGA_ARB_MAX_GPUS 3
+	fi
+
+	if [ "$lto" = "y" ]; then
+		echo "Enabling Clang ThinLTO..."
+		scripts/config --enable CONFIG_LTO_CLANG_THIN
+	fi
 
 	make -s kernelrelease >version
 	echo "Prepared $pkgbase version $(<version)"
 }
 
 build() {
-	cd $_srcname
-	make all
-	make htmldocs
+	cd $KERNELDIR
+	if [ "$ccache" = "y" ]; then
+		make all LLVM=1 \
+			LLVM_IAS=1 \
+			CC="ccache clang" \
+			AR=llvm-ar \
+			NM=llvm-nm \
+			LD=ld.lld \
+			STRIP=llvm-strip \
+			OBJCOPY=llvm-objcopy \
+			OBJDUMP=llvm-objdump \
+			OBJSIZE=llvm-size \
+			HOSTCC=clang \
+			HOSTCXX=clang++ \
+			HOSTAR=llvm-ar \
+			HOSTLD=ld.lld -j$(nproc --all)
+	else
+		make all LLVM=1 \
+			LLVM_IAS=1 \
+			CC=clang \
+			AR=llvm-ar \
+			NM=llvm-nm \
+			LD=ld.lld \
+			STRIP=llvm-strip \
+			OBJCOPY=llvm-objcopy \
+			OBJDUMP=llvm-objdump \
+			OBJSIZE=llvm-size \
+			HOSTCC=clang \
+			HOSTCXX=clang++ \
+			HOSTAR=llvm-ar \
+			HOSTLD=ld.lld \
+			-j$(nproc --all)
+	fi
 }
 
 _package() {
@@ -72,7 +131,7 @@ _package() {
 	provides=(VIRTUALBOX-GUEST-MODULES WIREGUARD-MODULE)
 	replaces=(virtualbox-guest-modules-arch wireguard-arch)
 
-	cd $_srcname
+	cd $KERNELDIR
 	local kernver="$(<version)"
 	local modulesdir="$pkgdir/usr/lib/modules/$kernver"
 
@@ -95,12 +154,12 @@ _package-headers() {
 	pkgdesc="Headers and scripts for building modules for the $pkgdesc kernel"
 	depends=(pahole)
 
-	cd $_srcname
+	cd $KERNELDIR
 	local builddir="$pkgdir/usr/lib/modules/$(<version)/build"
 
 	echo "Installing build files..."
 	install -Dt "$builddir" -m644 .config Makefile Module.symvers System.map \
-		localversion.* version vmlinux
+		version vmlinux
 	install -Dt "$builddir/kernel" -m644 kernel/Makefile
 	install -Dt "$builddir/arch/x86" -m644 arch/x86/Makefile
 	cp -t "$builddir" -a scripts
@@ -176,7 +235,7 @@ _package-headers() {
 _package-docs() {
 	pkgdesc="Documentation for the $pkgdesc kernel"
 
-	cd $_srcname
+	cd $KERNELDIR
 	local builddir="$pkgdir/usr/lib/modules/$(<version)/build"
 
 	echo "Installing documentation..."
@@ -192,7 +251,7 @@ _package-docs() {
 	ln -sr "$builddir/Documentation" "$pkgdir/usr/share/doc/$pkgbase"
 }
 
-pkgname=("$pkgbase" "$pkgbase-headers" "$pkgbase-docs")
+pkgname=("$pkgbase" "$pkgbase-headers")
 for _p in "${pkgname[@]}"; do
 	eval "package_$_p() {
     $(declare -f "_package${_p#$pkgbase}")
