@@ -73,6 +73,12 @@ prepare() {
 			scripts/config --set-val CONFIG_NR_CPUS $(nproc --all)
 			scripts/config --set-val CONFIG_VGA_ARB_MAX_GPUS $(lspci | grep -E "VGA|3D" | wc -l)
 		fi
+
+		if [[ $vendor == "GenuineIntel" ]]; then
+			scripts/config --enable CONFIG_MNATIVE_INTEL
+		elif [[ $vendor == "AuthenticAMD" ]]; then
+			scripts/config --enable CONFIG_MNATIVE_AMD
+		fi
 	else
 		echo "Using CI configs..."
 		scripts/config --set-val CONFIG_VGA_ARB_MAX_GPUS 3
