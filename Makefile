@@ -758,8 +758,7 @@ KBUILD_CFLAGS	+= -O3
 KBUILD_LDFLAGS	+= -O3
 ifdef CONFIG_CC_IS_CLANG
 ifdef CONFIG_LTO
-# It isn't possible to currently boot a kernel with --lto-O3.
-KBUILD_LDFLAGS	+= --lto-O2
+KBUILD_LDFLAGS	+= --lto-O3
 endif
 endif
 else ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
