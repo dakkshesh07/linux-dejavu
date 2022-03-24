@@ -167,3 +167,7 @@ localversion.10-pkgrel
 localversion.20-pkgname
 pkg/
 version
+
+# Misc
+clang/
+regen.sh
