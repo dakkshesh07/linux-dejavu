@@ -17,7 +17,7 @@ options=('!strip')
 
 export KBUILD_BUILD_HOST=archlinux
 export KBUILD_BUILD_TIMESTAMP="$(date -Ru${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EPOCH})"
-KERNELDIR="$(pwd)/../"
+KERNELDIR="$(pwd)"
 
 [ -z ${ci+x} ] && ci=n
 [ -z ${lto+x} ] && lto=n
@@ -62,8 +62,6 @@ prepare() {
 		HOSTLD=ld.lld \
 		dejavu_defconfig
 
-	make oldconfig && make prepare
-
 	if [ "$ci" = "n" ]; then
 		vendor=$(lscpu | awk '/Vendor ID/{print $3}')
 		if [[ $vendor == "GenuineIntel" || $vendor == "AuthenticAMD" ]]; then
@@ -89,7 +87,7 @@ prepare() {
 		scripts/config --enable CONFIG_LTO_CLANG_THIN
 	fi
 
-	make -s kernelrelease >version
+	rm -rf version && make -s kernelrelease >version
 	echo "Prepared $pkgbase version $(<version)"
 }
 
