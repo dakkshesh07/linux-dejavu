@@ -56,6 +56,9 @@
 #include "stats.h"
 #include "autogroup.h"
 
+/* Kprofiles */
+extern int kp_active_mode(void);
+
 /*
  * Targeted preemption latency for CPU-bound tasks:
  *
@@ -7204,7 +7207,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 	if (wake_flags & WF_TTWU) {
 		record_wakee(p);
 
-		if (sched_energy_enabled()) {
+		if (sched_energy_enabled() && kp_active_mode() != 3) {
 			new_cpu = find_energy_efficient_cpu(p, prev_cpu);
 			if (new_cpu >= 0)
 				return new_cpu;
