@@ -772,6 +772,49 @@ config CFI_PERMISSIVE
 
 	  If unsure, say N.
 
+config ARCH_SUPPORTS_LLVM_POLLY
+	bool
+	def_bool $(cc-option,-mllvm -polly) if CC_IS_CLANG
+	help
+	  An architecture should select this option if it can support LLVM's
+	  Polyhedral loop optimizer.
+
+config LLVM_POLLY
+	bool "Use LLVM's Polyhedral loop optimizer (Polly)"
+	depends on ARCH_SUPPORTS_LLVM_POLLY
+	help
+	  This option enables LLVM's polyhedral loop optimizer (Polly).
+	  Polly is capable of optimising various kernel loops for maximum
+	  cache locality. This requires the use of an LLVM toolchain that
+	  has been explicitly compiled with Polly support.
+	  More information can be found from LLVM's documentation:
+
+	    https://polly.llvm.org/docs/
+
+config LLVM_POLLY_VECTORIZER
+	string "Select vectorization strategy for Polly"
+	depends on LLVM_POLLY
+	default "stripmine"
+	help
+	  Select vectorization strategy for Polly, Supported options are:
+	  'none', 'polly', 'stripmine'.
+
+config LLVM_POLLY_GREEDY
+	bool "Make Polly to aggressively fuse any loops"
+	depends on LLVM_POLLY
+	depends on $(cc-option,-mllvm -polly-loopfusion-greedy)
+	help
+	  When selected, Polly will aggressively try to fuse any loop,
+	  regardless of the profitability.
+
+config LLVM_POLLY_DCE
+	bool "Enable Polly's dead code elimination pass"
+	depends on LLVM_POLLY
+	depends on $(cc-option,-mllvm -polly-run-dce)
+	help
+	  When selected, It will enable Polly's dead code elimination pass.
+	  This will analyze and remove statements that have been proven as dead.
+
 config HAVE_ARCH_WITHIN_STACK_FRAMES
 	bool
 	help

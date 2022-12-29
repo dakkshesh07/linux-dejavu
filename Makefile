@@ -833,6 +833,27 @@ KBUILD_LDFLAGS += -Os
 KBUILD_RUSTFLAGS += -Copt-level=s
 endif
 
+ifdef CONFIG_LLVM_POLLY
+LLVM_POLLY_FLAGS := -mllvm -polly \
+					-mllvm -polly-ast-use-context \
+					-mllvm -polly-invariant-load-hoisting \
+					-mllvm -polly-run-inliner \
+					-mllvm -polly-vectorizer=$(CONFIG_LLVM_POLLY_VECTORIZER)
+ifeq ($(shell test $(CONFIG_CLANG_VERSION) -gt 130000; echo $$?),0)
+LLVM_POLLY_FLAGS += -mllvm -polly-reschedule=1 \
+					-mllvm -polly-postopts=1
+ifdef CONFIG_LLVM_POLLY_GREEDY
+LLVM_POLLY_FLAGS += -mllvm -polly-loopfusion-greedy=1
+endif
+endif
+ifdef CONFIG_LLVM_POLLY_DCE
+LLVM_POLLY_FLAGS += -mllvm -polly-run-dce
+endif
+KBUILD_CFLAGS += $(LLVM_POLLY_FLAGS)
+KBUILD_AFLAGS += $(LLVM_POLLY_FLAGS)
+KBUILD_LDFLAGS += $(LLVM_POLLY_FLAGS)
+endif
+
 # Always set `debug-assertions` and `overflow-checks` because their default
 # depends on `opt-level` and `debug-assertions`, respectively.
 KBUILD_RUSTFLAGS += -Cdebug-assertions=$(if $(CONFIG_RUST_DEBUG_ASSERTIONS),y,n)
